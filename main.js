@@ -4,6 +4,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged }
 import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Importar la configuración de Firebase desde tu archivo centralizado
+// Asegúrate de que este archivo 'firebaseconfig.js' exista y contenga tus configuraciones de db y auth.
 import { db, auth, firebaseConfig } from './firebaseconfig.js';
 
 // Variables globales de Firebase (proporcionadas por el entorno Canvas)
@@ -59,11 +60,11 @@ async function initFirebase() {
                 userId = user.uid;
                 console.log("initFirebase - Firebase inicializado. ID de Usuario:", userId);
                 document.getElementById('user-id-display').textContent = `ID de Usuario: ${userId}`;
-                
+
                 // Cargar categorías y productos después de la autenticación
                 console.log("initFirebase - Llamando a loadCategories y loadAllProducts.");
-                loadCategories(); 
-                loadAllProducts(); 
+                loadCategories();
+                loadAllProducts();
             } else {
                 console.log("initFirebase - Ningún usuario ha iniciado sesión. Marcando cargas como completas.");
                 userId = null;
@@ -335,7 +336,7 @@ async function loadProductsByCategory(categoryId) {
     try {
         const productsColRef = collection(db, `artifacts/${appId}/public/data/products`);
         const q = query(productsColRef, where("categoryId", "==", categoryId));
-        
+
         onSnapshot(q, (snapshot) => {
             console.log("loadProductsByCategory - onSnapshot recibido para categoría. Número de productos:", snapshot.size);
             productContainer.innerHTML = ''; // Limpia en cada actualización
@@ -414,7 +415,7 @@ function openMobileMenu() {
     mobileNav.classList.remove('translate-x-full');
     mobileNav.classList.add('translate-x-0');
     mobileNav.classList.remove('hidden'); // Asegurarse de que el menú es visible
-    
+
     mobileMenuButton.classList.add('open'); // Añadir clase para animar la hamburguesa a 'X'
     mobileMenuButton.setAttribute('aria-expanded', 'true'); // Actualizar estado de accesibilidad
 }
@@ -429,7 +430,7 @@ function closeMobileMenu() {
 
     mobileNav.classList.remove('translate-x-0');
     mobileNav.classList.add('translate-x-full');
-    
+
     // Ocultar el menú después de la transición
     mobileNav.addEventListener('transitionend', function handler() {
         mobileNav.classList.add('hidden');
@@ -438,7 +439,7 @@ function closeMobileMenu() {
 
     mobileMenuButton.classList.remove('open'); // Quitar clase para animar la 'X' de vuelta a hamburguesa
     mobileMenuButton.setAttribute('aria-expanded', 'false'); // Actualizar estado de accesibilidad
-    
+
     closeCategoriesSubmenu(); // Asegurarse de cerrar el submenú de categorías también
 }
 
@@ -473,7 +474,7 @@ function closeCategoriesSubmenu() {
 // Lógica para el menú de hamburguesa y submenús
 document.addEventListener('DOMContentLoaded', function() {
     const mobileMenuButton = document.getElementById('mobile-menu-button');
-    const closeMobileMenuButton = document.getElementById('close-mobile-menu-button');
+    // Ya no necesitamos una referencia al closeMobileMenuButton aquí porque el botón de hamburguesa lo gestiona todo.
     const mobileNav = document.getElementById('mobile-nav');
     const categoriesToggleButton = document.getElementById('categories-toggle-button');
 
@@ -481,17 +482,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const catalogLinkMobile = document.getElementById('catalog-link-mobile');
     const catalogLinkDesktop = document.getElementById('catalog-link-desktop');
 
-    // Abrir menú móvil
+    // ** Lógica para el botón de hamburguesa: Alterna abrir/cerrar **
     mobileMenuButton.addEventListener('click', function(event) {
         event.stopPropagation(); // Evitar que el click se propague al body y cierre el menú
-        openMobileMenu(); // Llama a la nueva función openMobileMenu
+        if (mobileNav.classList.contains('translate-x-0')) { // Si el menú está abierto
+            closeMobileMenu();
+        } else { // Si el menú está cerrado
+            openMobileMenu();
+        }
     });
 
-    // Cerrar menú móvil desde el botón de cerrar
-    closeMobileMenuButton.addEventListener('click', function(event) {
-        event.stopPropagation();
-        closeMobileMenu();
-    });
+    // Ya no necesitamos un evento específico para un closeMobileMenuButton porque fue eliminado.
+    // closeMobileMenuButton.addEventListener('click', function(event) {
+    //     event.stopPropagation();
+    //     closeMobileMenu();
+    // });
 
     // Toggle del submenú de categorías
     categoriesToggleButton.addEventListener('click', function(event) {
