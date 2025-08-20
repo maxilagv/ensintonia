@@ -162,7 +162,7 @@ async function loadCategories() {
 
                 // Renderizar en la sección principal
                 const categoryCard = `
-                    <div class="product-card bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer" onclick="goToCategory('${category.name}', '${category.id}')">
+                    <div class="product-card bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer" onclick="goToCategory('${category.name}')">
                         <img src="${category.imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen'}" alt="${category.name}" class="w-full h-48 sm:h-52 object-cover transition duration-300 ease-in-out transform hover:scale-105">
                         <div class="p-6 sm:p-7">
                             <h3 class="text-2xl sm:text-3xl font-semibold mb-2 sm:mb-3 text-gray-900">${category.name}</h3>
@@ -176,7 +176,7 @@ async function loadCategories() {
                 // Renderizar en el submenú móvil
                 const submenuItem = `
                     <li>
-                        <a href="#catalogo-productos" onclick="goToCategory('${category.name}', '${category.id}'); closeMobileMenu();" class="block py-2 text-xl text-gray-700 hover:text-blue-600 transition duration-200">
+                        <a href="#catalogo-productos" onclick="goToCategory('${category.name}'); closeMobileMenu();" class="block py-2 text-xl text-gray-700 hover:text-blue-600 transition duration-200">
                             ${category.name}
                         </a>
                     </li>
@@ -230,10 +230,10 @@ async function addCategory(name, description, imageUrl) {
  * @param {string} name - Nombre del producto.
  * @param {number} price - Precio del producto.
  * @param {string} imageUrl - URL de la imagen del producto (debería provenir de Cloud Storage).
- * @param {string} categoryId - ID de la categoría a la que pertenece el producto.
+ * @param {string} categoryName - Nombre de la categoría a la que pertenece el producto.
  * @param {string} description - Descripción del producto.
  */
-async function addProduct(name, price, imageUrl, categoryId, description) {
+async function addProduct(name, price, imageUrl, categoryName, description) {
     if (!db || !userId) {
         showMessageBox("Error: Firebase o usuario no autenticado. No se puede añadir el producto.");
         return;
@@ -243,7 +243,7 @@ async function addProduct(name, price, imageUrl, categoryId, description) {
             name: name,
             price: price,
             imageUrl: imageUrl,
-            categoryId: categoryId, // Enlace a la categoría
+            category: categoryName, // Se guarda el nombre de la categoría
             description: description,
             createdAt: new Date()
         });
@@ -320,10 +320,10 @@ async function loadAllProducts() {
 /**
  * @function loadProductsByCategory
  * @description Carga productos filtrados por categoría desde Firestore y los muestra.
- * @param {string} categoryId - El ID de la categoría para filtrar.
+ * @param {string} categoryName - El NOMBRE de la categoría para filtrar.
  */
-async function loadProductsByCategory(categoryId) {
-    console.log("loadProductsByCategory - Iniciando carga de productos por categoría:", categoryId);
+async function loadProductsByCategory(categoryName) {
+    console.log("loadProductsByCategory - Iniciando carga de productos por categoría:", categoryName);
     if (!db) {
         console.error("loadProductsByCategory - Firestore no inicializado. No se pueden cargar productos por categoría.");
         return;
@@ -335,14 +335,15 @@ async function loadProductsByCategory(categoryId) {
 
     try {
         const productsColRef = collection(db, `artifacts/${appId}/public/data/products`);
-        const q = query(productsColRef, where("categoryId", "==", categoryId));
+        // MODIFICADO: Ahora el filtro usa el campo 'category' con el nombre de la categoría
+        const q = query(productsColRef, where("category", "==", categoryName)); 
 
         onSnapshot(q, (snapshot) => {
             console.log("loadProductsByCategory - onSnapshot recibido para categoría. Número de productos:", snapshot.size);
             productContainer.innerHTML = ''; // Limpia en cada actualización
             if (snapshot.empty) {
                 console.log("loadProductsByCategory - No hay productos en esta categoría.");
-                productContainer.innerHTML = '<p class="text-center text-gray-600 col-span-full">No hay productos en esta categoría.</p>';
+                productContainer.innerHTML = `<p class="text-center text-gray-600 col-span-full">No hay productos disponibles en la categoría "${categoryName}".</p>`;
             } else {
                 snapshot.forEach(doc => {
                     const { name, price, imageUrl, description } = doc.data();
@@ -394,11 +395,11 @@ function showMessageBox(message) {
  * @function goToCategory
  * @description Maneja la navegación a una categoría específica y carga sus productos.
  * @param {string} categoryName - El nombre de la categoría a la que navegar.
- * @param {string} categoryId - El ID de la categoría en Firestore.
+ * @param {string} categoryId (opcional) - El ID de la categoría en Firestore, aunque ya no se usa directamente para filtrar.
  */
-function goToCategory(categoryName, categoryId) {
+function goToCategory(categoryName, categoryId) { // Mantiene categoryId para compatibilidad, aunque ya no se usa para la consulta
     showMessageBox(`Navegando a la categoría: ${categoryName}. Cargando productos...`);
-    loadProductsByCategory(categoryId); // Carga productos filtrados por categoría
+    loadProductsByCategory(categoryName); // MODIFICADO: Pasa el nombre de la categoría para filtrar
     closeMobileMenu();
     // Desplazar la vista a la sección de productos
     document.getElementById('catalogo-productos').scrollIntoView({ behavior: 'smooth' });
@@ -474,7 +475,6 @@ function closeCategoriesSubmenu() {
 // Lógica para el menú de hamburguesa y submenús
 document.addEventListener('DOMContentLoaded', function() {
     const mobileMenuButton = document.getElementById('mobile-menu-button');
-    // Ya no necesitamos una referencia al closeMobileMenuButton aquí porque el botón de hamburguesa lo gestiona todo.
     const mobileNav = document.getElementById('mobile-nav');
     const categoriesToggleButton = document.getElementById('categories-toggle-button');
 
@@ -491,12 +491,6 @@ document.addEventListener('DOMContentLoaded', function() {
             openMobileMenu();
         }
     });
-
-    // Ya no necesitamos un evento específico para un closeMobileMenuButton porque fue eliminado.
-    // closeMobileMenuButton.addEventListener('click', function(event) {
-    //     event.stopPropagation();
-    //     closeMobileMenu();
-    // });
 
     // Toggle del submenú de categorías
     categoriesToggleButton.addEventListener('click', function(event) {
@@ -567,3 +561,4 @@ window.loadAllProducts = loadAllProducts; // Exponer para ser llamada desde los 
 window.loadProductsByCategory = loadProductsByCategory; // Exponer para ser llamada desde los enlaces de categoría
 window.closeMobileMenu = closeMobileMenu; // Exponer para ser llamada desde los enlaces del submenú
 window.openMobileMenu = openMobileMenu; // Exponer para ser llamada
+
