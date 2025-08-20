@@ -22,6 +22,7 @@
         .product-card {
             transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out;
             border: 1px solid #e2f0f4; /* Borde suave, ligeramente azulado */
+            border-radius: 0.75rem; /* rounded-xl de Tailwind */
         }
         .product-card:hover {
             transform: translateY(-8px) scale(1.02); /* Efecto más pronunciado al pasar el ratón */
@@ -34,6 +35,7 @@
             background-color: #0d6efd; /* Azul vibrante */
             transition: background-color 0.3s ease-in-out, transform 0.2s ease-in-out, box-shadow 0.3s ease-in-out;
             box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15); /* Sombra inicial más pronunciada */
+            border-radius: 0.5rem; /* rounded-lg de Tailwind */
         }
         .btn-primary:hover {
             background-color: #0b5ed7; /* Azul ligeramente más oscuro al pasar el ratón */
@@ -53,6 +55,7 @@
             align-items: center; /* Para centrar el ícono */
             justify-content: center; /* Para centrar el ícono */
             font-size: 2rem; /* Tamaño del ícono de Font Awesome */
+            border-radius: 9999px; /* rounded-full de Tailwind */
         }
         .btn-whatsapp:hover {
             background-color: #1DA851; /* Verde WhatsApp más oscuro al pasar el ratón */
@@ -82,6 +85,7 @@
         /* Estilos para las tarjetas de contacto */
         .contact-card {
             transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+            border-radius: 0.75rem; /* rounded-xl de Tailwind */
         }
         .contact-card:hover {
             transform: translateY(-5px); /* Pequeño desplazamiento hacia arriba */
@@ -226,6 +230,11 @@
         }
         /* --- Fin de los estilos del botón de hamburguesa --- */
 
+        /* Sombra interior para el footer */
+        .shadow-inner-top {
+            box-shadow: inset 0 8px 10px -5px rgba(0, 0, 0, 0.2);
+        }
+
     </style>
 </head>
 <body class="text-gray-800">
@@ -290,13 +299,7 @@
         </div>
 
         <!-- Menú de Navegación para móvil (oculto por defecto) -->
-        <!-- Se añade 'fixed inset-0' para ocupar toda la pantalla y 'z-40' para estar sobre el contenido principal -->
         <nav id="mobile-nav" class="hidden fixed inset-0 bg-white z-40 p-6 flex flex-col items-start space-y-6 transform translate-x-full transition-transform duration-300 ease-in-out">
-            <button id="close-mobile-menu-button" class="absolute top-4 right-4 p-2 rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
             <ul class="flex flex-col space-y-6 w-full mt-10">
                 <li><a href="#catalogo-productos" id="catalog-link-mobile" class="navbar-link text-2xl font-semibold text-gray-800 hover:text-blue-600 block py-2">Catálogo</a></li>
                 <li><a href="#contacto" class="navbar-link text-2xl font-semibold text-gray-800 hover:text-blue-600 block py-2">Contacto</a></li>
