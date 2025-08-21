@@ -232,8 +232,10 @@ async function addCategory(name, description, imageUrl) {
  * @param {string} imageUrl - URL de la imagen del producto (debería provenir de Cloud Storage).
  * @param {string} categoryName - Nombre de la categoría a la que pertenece el producto.
  * @param {string} description - Descripción del producto.
+ * @param {string} [componentsUrl] - URL opcional a la página de componentes del producto.
+ * @param {string} [videoUrl] - URL opcional de un video para el producto (ej. YouTube embed URL o link directo a .mp4).
  */
-async function addProduct(name, price, imageUrl, categoryName, description) {
+async function addProduct(name, price, imageUrl, categoryName, description, componentsUrl = null, videoUrl = null) {
     if (!db || !userId) {
         showMessageBox("Error: Firebase o usuario no autenticado. No se puede añadir el producto.");
         return;
@@ -245,6 +247,8 @@ async function addProduct(name, price, imageUrl, categoryName, description) {
             imageUrl: imageUrl,
             category: categoryName, // Se guarda el nombre de la categoría
             description: description,
+            componentsUrl: componentsUrl,
+            videoUrl: videoUrl, // ¡Nuevo campo para el link de video!
             createdAt: new Date()
         });
         console.log("Producto añadido con ID: ", newProductRef.id);
@@ -283,15 +287,87 @@ async function loadAllProducts() {
                 productContainer.innerHTML = '<p class="text-center text-gray-600 col-span-full">No hay productos disponibles en esta sección.</p>';
             } else {
                 snapshot.forEach(doc => {
-                    const { name, price, imageUrl, description } = doc.data();
+                    // Se extraen los nuevos campos componentsUrl y videoUrl
+                    const { name, price, imageUrl, description, componentsUrl, videoUrl } = doc.data();
                     console.log("loadAllProducts - Producto cargado:", name);
+                    console.log("loadAllProducts - Video URL para producto", name, ":", videoUrl); // DEBUG: Log de la URL del video
+
+                    let mediaHtml = '';
+                    if (videoUrl) {
+                        const youtubeMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|)([\w-]{11})(?:\S+)?/);
+                        const streamableMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?streamable\.com\/([\w-]+)(?:\S+)?/); // Nuevo regex para Streamable
+
+                        if (youtubeMatch && youtubeMatch[1]) {
+                            const embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=0&controls=1&mute=1&loop=1&playlist=${youtubeMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de YouTube para el producto ${name}'); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadAllProducts - Usando iframe de YouTube para producto", name, ". URL:", embedUrl);
+                        } else if (streamableMatch && streamableMatch[1]) { // Nuevo: Si es Streamable
+                            const embedUrl = `https://streamable.com/e/${streamableMatch[1]}?autoplay=0&controls=1&muted=1&loop=0`; // Streamable embed URL
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de Streamable para el producto ${name}'); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadAllProducts - Usando iframe de Streamable para producto", name, ". URL:", embedUrl);
+                        }
+                        else {
+                            // Si no es YouTube ni Streamable, asumir que es un video directo (ej. .mp4)
+                            mediaHtml = `
+                                <video 
+                                    class="w-full h-40 object-cover rounded-t-xl" 
+                                    controls 
+                                    muted 
+                                    loop 
+                                    playsinline
+                                    onerror="console.error('Error al cargar video directo para el producto ${name}'); this.parentNode.innerHTML='<img src=\\'https://placehold.co/600x400/cccccc/333333?text=Error+Video\\' alt=\\'Error de video\\' class=\\'w-full h-40 object-cover rounded-t-xl\\'>';"
+                                >
+                                    <source src="${videoUrl}" type="video/mp4">
+                                    Tu navegador no soporta el tag de video.
+                                </video>
+                            `;
+                            console.log("loadAllProducts - Usando video directo para producto", name, ". URL:", videoUrl);
+                        }
+                    } else if (imageUrl) {
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                    } else {
+                        mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-40 object-cover rounded-t-xl">`;
+                    }
+
+                    let componentsButtonHtml = '';
+                    if (componentsUrl) {
+                        componentsButtonHtml = `
+                            <a href="${componentsUrl}" target="_blank" rel="noopener noreferrer" class="btn-primary text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-lg w-full mt-4 flex items-center justify-center">
+                                <i class="fas fa-microchip mr-2"></i> Ver Componentes
+                            </a>
+                        `;
+                    }
+
                     const productCard = `
-                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden">
-                            <img src="${imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen'}" alt="${name}" class="w-full h-40 object-cover">
-                            <div class="p-4">
+                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
+                            ${mediaHtml}
+                            <div class="p-4 flex flex-col flex-grow">
                                 <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
-                                <p class="text-gray-600 text-sm mt-1">${description || ''}</p>
+                                <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
                                 <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
+                                ${componentsButtonHtml}
                             </div>
                         </div>
                     `;
@@ -346,15 +422,86 @@ async function loadProductsByCategory(categoryName) {
                 productContainer.innerHTML = `<p class="text-center text-gray-600 col-span-full">No hay productos disponibles en la categoría "${categoryName}".</p>`;
             } else {
                 snapshot.forEach(doc => {
-                    const { name, price, imageUrl, description } = doc.data();
+                    // Se extraen los nuevos campos componentsUrl y videoUrl
+                    const { name, price, imageUrl, description, componentsUrl, videoUrl } = doc.data();
                     console.log("loadProductsByCategory - Producto cargado por categoría:", name);
+                    console.log("loadProductsByCategory - Video URL para producto", name, ":", videoUrl); // DEBUG: Log de la URL del video
+                    
+                    let mediaHtml = '';
+                    if (videoUrl) {
+                        const youtubeMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|)([\w-]{11})(?:\S+)?/);
+                        const streamableMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?streamable\.com\/([\w-]+)(?:\S+)?/); // Nuevo regex para Streamable
+
+                        if (youtubeMatch && youtubeMatch[1]) {
+                            const embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=0&controls=1&mute=1&loop=1&playlist=${youtubeMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de YouTube para el producto ${name}'); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadProductsByCategory - Usando iframe de YouTube para producto", name, ". URL:", embedUrl);
+                        } else if (streamableMatch && streamableMatch[1]) { // Nuevo: Si es Streamable
+                            const embedUrl = `https://streamable.com/e/${streamableMatch[1]}?autoplay=0&controls=1&muted=1&loop=0`; // Streamable embed URL
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de Streamable para el producto ${name}'); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadProductsByCategory - Usando iframe de Streamable para producto", name, ". URL:", embedUrl);
+                        }
+                        else {
+                            mediaHtml = `
+                                <video 
+                                    class="w-full h-40 object-cover rounded-t-xl" 
+                                    controls 
+                                    muted 
+                                    loop 
+                                    playsinline
+                                    onerror="console.error('Error al cargar video directo para el producto ${name}'); this.parentNode.innerHTML='<img src=\\'https://placehold.co/600x400/cccccc/333333?text=Error+Video\\' alt=\\'Error de video\\' class=\\'w-full h-40 object-cover rounded-t-xl\\'>';"
+                                >
+                                    <source src="${videoUrl}" type="video/mp4">
+                                    Tu navegador no soporta el tag de video.
+                                </video>
+                            `;
+                            console.log("loadProductsByCategory - Usando video directo para producto", name, ". URL:", videoUrl);
+                        }
+                    } else if (imageUrl) {
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                    } else {
+                        mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-40 object-cover rounded-t-xl">`;
+                    }
+
+                    let componentsButtonHtml = '';
+                    if (componentsUrl) {
+                        componentsButtonHtml = `
+                            <a href="${componentsUrl}" target="_blank" rel="noopener noreferrer" class="btn-primary text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-lg w-full mt-4 flex items-center justify-center">
+                                <i class="fas fa-microchip mr-2"></i> Ver Componentes
+                            </a>
+                        `;
+                    }
+
                     const productCard = `
-                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden">
-                            <img src="${imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen'}" alt="${name}" class="w-full h-40 object-cover">
-                            <div class="p-4">
+                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
+                            ${mediaHtml}
+                            <div class="p-4 flex flex-col flex-grow">
                                 <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
-                                <p class="text-gray-600 text-sm mt-1">${description || ''}</p>
+                                <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
                                 <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
+                                ${componentsButtonHtml}
                             </div>
                         </div>
                     `;
@@ -362,6 +509,8 @@ async function loadProductsByCategory(categoryName) {
                 });
             }
             hideLoading('products-loading-spinner'); // Oculta el loader de productos
+            productsInitialLoadComplete = true; // Marcar productos como cargados
+            checkAndHideMainLoader(); // Verificar si el loader principal puede ocultarse
         }, (error) => {
             console.error("loadProductsByCategory - Error al cargar productos por categoría:", error);
             showMessageBox("Error al cargar productos por categoría. Inténtalo más tarde.");
@@ -561,4 +710,3 @@ window.loadAllProducts = loadAllProducts; // Exponer para ser llamada desde los 
 window.loadProductsByCategory = loadProductsByCategory; // Exponer para ser llamada desde los enlaces de categoría
 window.closeMobileMenu = closeMobileMenu; // Exponer para ser llamada desde los enlaces del submenú
 window.openMobileMenu = openMobileMenu; // Exponer para ser llamada
-
