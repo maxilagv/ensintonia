@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome CDN para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         /* Estilos generales del cuerpo y fuente */
         body {
@@ -200,21 +202,16 @@
             <div id="editCategory" class="section-content hidden">
                 <h2 class="text-3xl font-bold text-center mb-6 text-blue-300">Editar Categoría Existente</h2>
                 <p class="text-center text-gray-400 mb-6">
-                    Aquí podrías cargar una lista de categorías existentes para seleccionar y editar.
-                    En un entorno real, esto interactuaría con tu base de datos.
+                    Selecciona una categoría de la lista para cargar sus datos y editarla.
                 </p>
                 <div class="space-y-4">
-                    <!-- Ejemplo de un campo para buscar/seleccionar una categoría -->
                     <div>
                         <label for="selectCategoryToEdit" class="block text-lg font-medium mb-2">Seleccionar Categoría:</label>
                         <select id="selectCategoryToEdit" class="input-field">
                             <option value="">-- Selecciona una categoría --</option>
-                            <option value="hogar">Hogar</option>
-                            <option value="audio">Audio</option>
-                            <option value="electronica">Electrónica</option>
+                            <!-- Las opciones se cargarán dinámicamente desde Firestore -->
                         </select>
                     </div>
-                    <!-- Campos para editar (se llenarían dinámicamente) -->
                     <div>
                         <label for="editedCategoryName" class="block text-lg font-medium mb-2">Nuevo Nombre:</label>
                         <input type="text" id="editedCategoryName" class="input-field" placeholder="Nuevo nombre de la categoría">
@@ -243,6 +240,27 @@
                         <label for="productImageUrl" class="block text-lg font-medium mb-2">URL de la Imagen:</label>
                         <input type="url" id="productImageUrl" class="input-field" placeholder="https://ejemplo.com/producto.jpg" required>
                     </div>
+                    <!-- Campo para seleccionar la categoría del producto -->
+                    <div>
+                        <label for="productCategory" class="block text-lg font-medium mb-2">Categoría:</label>
+                        <select id="productCategory" class="input-field" required>
+                            <option value="">-- Selecciona una categoría --</option>
+                            <!-- Las opciones se cargarán dinámicamente desde Firestore -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="productDescription" class="block text-lg font-medium mb-2">Descripción:</label>
+                        <textarea id="productDescription" class="input-field" rows="3" placeholder="Descripción breve del producto"></textarea>
+                    </div>
+                    <!-- NUEVO: Campos para URL de Componentes y URL de Video -->
+                    <div>
+                        <label for="productComponentsUrl" class="block text-lg font-medium mb-2">URL Componentes (Opcional):</label>
+                        <input type="url" id="productComponentsUrl" class="input-field" placeholder="https://ejemplo.com/componentes-producto.html">
+                    </div>
+                    <div>
+                        <label for="productVideoUrl" class="block text-lg font-medium mb-2">URL Video (Opcional):</label>
+                        <input type="url" id="productVideoUrl" class="input-field" placeholder="https://www.youtube.com/watch?v=VIDEO_ID o https://ejemplo.com/video.mp4">
+                    </div>
                     <button type="submit" class="action-button w-full">Crear Producto</button>
                 </form>
             </div>
@@ -251,18 +269,14 @@
             <div id="editProduct" class="section-content hidden">
                 <h2 class="text-3xl font-bold text-center mb-6 text-blue-300">Editar Producto Existente</h2>
                 <p class="text-center text-gray-400 mb-6">
-                    Aquí podrías cargar una lista de productos existentes para seleccionar y editar.
-                    En un entorno real, esto interactuaría con tu base de datos.
+                    Selecciona un producto de la lista para cargar sus datos y editarlo.
                 </p>
                 <div class="space-y-4">
-                    <!-- Ejemplo de un campo para buscar/seleccionar un producto -->
                     <div>
                         <label for="selectProductToEdit" class="block text-lg font-medium mb-2">Seleccionar Producto:</label>
                         <select id="selectProductToEdit" class="input-field">
                             <option value="">-- Selecciona un producto --</option>
-                            <option value="heladera">Heladera No Frost</option>
-                            <option value="parlante">Parlante Bluetooth</option>
-                            <option value="tv">Smart TV 55"</option>
+                            <!-- Las opciones se cargarán dinámicamente desde Firestore -->
                         </select>
                     </div>
                     <!-- Campos para editar (se llenarían dinámicamente) -->
@@ -278,6 +292,27 @@
                         <label for="editedProductImageUrl" class="block text-lg font-medium mb-2">Nueva URL de Imagen:</label>
                         <input type="url" id="editedProductImageUrl" class="input-field" placeholder="Nueva URL de imagen">
                     </div>
+                    <!-- Campo para seleccionar la categoría del producto a editar -->
+                    <div>
+                        <label for="editedProductCategory" class="block text-lg font-medium mb-2">Categoría:</label>
+                        <select id="editedProductCategory" class="input-field" required>
+                            <option value="">-- Selecciona una categoría --</option>
+                            <!-- Las opciones se cargarán dinámicamente desde Firestore -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="editedProductDescription" class="block text-lg font-medium mb-2">Descripción:</label>
+                        <textarea id="editedProductDescription" class="input-field" rows="3" placeholder="Nueva descripción del producto"></textarea>
+                    </div>
+                    <!-- NUEVO: Campos para URL de Componentes y URL de Video en edición -->
+                    <div>
+                        <label for="editedProductComponentsUrl" class="block text-lg font-medium mb-2">Nueva URL Componentes (Opcional):</label>
+                        <input type="url" id="editedProductComponentsUrl" class="input-field" placeholder="Nueva URL de componentes">
+                    </div>
+                    <div>
+                        <label for="editedProductVideoUrl" class="block text-lg font-medium mb-2">Nueva URL Video (Opcional):</label>
+                        <input type="url" id="editedProductVideoUrl" class="input-field" placeholder="Nueva URL de video">
+                    </div>
                     <button class="action-button w-full">Guardar Cambios de Producto</button>
                 </div>
             </div>
@@ -288,3 +323,4 @@
     <script src="admin.js" type="module"></script>
 </body>
 </html>
+
