@@ -346,7 +346,8 @@ async function loadAllProducts() {
                             console.log("loadAllProducts - Usando video directo para producto", name, ". URL:", videoUrl);
                         }
                     } else if (imageUrl) {
-                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                        // Se agrega el onclick para abrir la imagen en pantalla completa
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl cursor-pointer" onclick="openFullscreenImage('${imageUrl}', '${name}')" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
                     } else {
                         mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-40 object-cover rounded-t-xl">`;
                     }
@@ -480,7 +481,8 @@ async function loadProductsByCategory(categoryName) {
                             console.log("loadProductsByCategory - Usando video directo para producto", name, ". URL:", videoUrl);
                         }
                     } else if (imageUrl) {
-                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                        // Se agrega el onclick para abrir la imagen en pantalla completa
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl cursor-pointer" onclick="openFullscreenImage('${imageUrl}', '${name}')" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
                     } else {
                         mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-40 object-cover rounded-t-xl">`;
                     }
@@ -620,12 +622,41 @@ function closeCategoriesSubmenu() {
     }
 }
 
+/**
+ * @function openFullscreenImage
+ * @description Abre un modal para mostrar la imagen del producto en pantalla completa.
+ * @param {string} imageUrl - La URL de la imagen a mostrar.
+ * @param {string} altText - El texto alternativo para la imagen.
+ */
+function openFullscreenImage(imageUrl, altText) {
+    const modal = document.getElementById('image-fullscreen-modal');
+    const image = document.getElementById('fullscreen-image');
+
+    image.src = imageUrl;
+    image.alt = altText;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden'; // Evita el scroll del cuerpo
+}
+
+/**
+ * @function closeFullscreenImage
+ * @description Cierra el modal de imagen en pantalla completa.
+ */
+function closeFullscreenImage() {
+    const modal = document.getElementById('image-fullscreen-modal');
+    modal.classList.remove('open');
+    document.body.style.overflow = ''; // Restaura el scroll del cuerpo
+}
+
 
 // Lógica para el menú de hamburguesa y submenús
 document.addEventListener('DOMContentLoaded', function() {
     const mobileMenuButton = document.getElementById('mobile-menu-button');
     const mobileNav = document.getElementById('mobile-nav');
     const categoriesToggleButton = document.getElementById('categories-toggle-button');
+    const closeImageModalButton = document.getElementById('close-image-modal');
+    const imageFullscreenModal = document.getElementById('image-fullscreen-modal');
+
 
     // Referencias a los enlaces de Catálogo
     const catalogLinkMobile = document.getElementById('catalog-link-mobile');
@@ -685,6 +716,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Cerrar modal de imagen al hacer clic en el botón de cerrar
+    if (closeImageModalButton) {
+        closeImageModalButton.addEventListener('click', closeFullscreenImage);
+    }
+
+    // Cerrar modal de imagen al hacer clic fuera de la imagen (en el overlay)
+    if (imageFullscreenModal) {
+        imageFullscreenModal.addEventListener('click', function(event) {
+            if (event.target === imageFullscreenModal) { // Solo si el click es directamente en el overlay
+                closeFullscreenImage();
+            }
+        });
+    }
+
     // Opcional: Cerrar el menú móvil cuando se hace clic en un enlace interno (excepto Categorías)
     // Los enlaces del submenú de categorías ya tienen closeMobileMenu() en su onclick
     mobileNav.querySelectorAll('a[href^="#"]').forEach(link => {
@@ -710,3 +755,6 @@ window.loadAllProducts = loadAllProducts; // Exponer para ser llamada desde los 
 window.loadProductsByCategory = loadProductsByCategory; // Exponer para ser llamada desde los enlaces de categoría
 window.closeMobileMenu = closeMobileMenu; // Exponer para ser llamada desde los enlaces del submenú
 window.openMobileMenu = openMobileMenu; // Exponer para ser llamada
+window.openFullscreenImage = openFullscreenImage; // Exponer para abrir imágenes en pantalla completa
+window.closeFullscreenImage = closeFullscreenImage; // Exponer para cerrar imágenes en pantalla completa
+
