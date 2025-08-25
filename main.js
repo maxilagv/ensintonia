@@ -1,9 +1,10 @@
 // Importar módulos de Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, query, where, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Importar la configuración de Firebase desde tu archivo centralizado
+// Asegúrate de que este archivo 'firebaseconfig.js' exista y contenga tus configuraciones de db y auth.
 import { db, auth, firebaseConfig } from './firebaseconfig.js';
 
 // Variables globales de Firebase (proporcionadas por el entorno Canvas)
@@ -18,16 +19,24 @@ let categoriesData = []; // Para almacenar las categorías cargadas
 let categoriesInitialLoadComplete = false;
 let productsInitialLoadComplete = false;
 
+// Variable global para almacenar los intervalos de animación de las categorías
+let categoryAnimationIntervals = {};
+
 /**
  * @function checkAndHideMainLoader
  * @description Verifica si todas las cargas iniciales (categorías y productos) han finalizado
  * y oculta el loader principal si es así.
  */
 function checkAndHideMainLoader() {
-    console.log("checkAndHideMainLoader - categoriesInitialLoadComplete:", categoriesInitialLoadComplete, "productsInitialLoadComplete:", productsInitialLoadComplete);
+    console.log("checkAndHideMainLoader - called."); // Log de inicio
+    console.log("checkAndHideMainLoader - categoriesInitialLoadComplete:", categoriesInitialLoadComplete);
+    console.log("checkAndHideMainLoader - productsInitialLoadComplete:", productsInitialLoadComplete);
+
     if (categoriesInitialLoadComplete && productsInitialLoadComplete) {
         console.log("checkAndHideMainLoader - Ambas cargas iniciales completas. Ocultando loader futurista.");
         hideLoading('futuristic-loader');
+    } else {
+        console.log("checkAndHideMainLoader - Esperando a que todas las cargas iniciales se completen.");
     }
 }
 
@@ -111,11 +120,16 @@ function hideLoading(spinnerId) {
     const loader = document.getElementById(spinnerId);
     if (loader) { // Asegurarse de que el loader existe
         if (spinnerId === 'futuristic-loader') {
-            loader.style.opacity = '0'; // Inicia la transición de opacidad
-            // Asegurarse de que la clase 'hidden' se aplique después de la transición
+            loader.style.opacity = '0'; // Inicia la transición
+            loader.style.pointerEvents = 'none'; // Deshabilita los eventos del puntero inmediatamente
+            console.log("hideLoading - Futuristic loader: opacity set to 0, pointer-events set to none.");
+
+            // Eliminar el elemento del DOM después de la transición
             setTimeout(() => {
-                loader.classList.add('hidden'); // Oculta después de la transición
+                loader.classList.add('hidden'); // Añade la clase 'hidden' después de la transición
+                // loader.remove(); // Elimina el loader del DOM después de la transición
                 document.body.style.overflow = ''; // Restaura el scroll
+                console.log("hideLoading - Futuristic loader: 'hidden' class added after timeout.");
             }, 500); // 500ms coincide con la duración de la transición CSS
         } else {
             loader.classList.add('hidden');
@@ -126,7 +140,8 @@ function hideLoading(spinnerId) {
 /**
  * @function loadCategories
  * @description Carga las categorías desde Firestore en tiempo real y las renderiza en la página
- * y en el submenú de categorías del menú móvil.
+ * y en el submenú de categorías del menú móvil. También carga una muestra de imágenes de productos
+ * para cada categoría para la animación.
  */
 async function loadCategories() {
     console.log("loadCategories - Iniciando carga de categorías.");
@@ -140,7 +155,7 @@ async function loadCategories() {
 
     const categoriesCol = collection(db, `artifacts/${appId}/public/data/categories`);
 
-    onSnapshot(categoriesCol, (snapshot) => {
+    onSnapshot(categoriesCol, async (snapshot) => { // Hacer la función de callback async
         console.log("loadCategories - onSnapshot recibido. Número de categorías:", snapshot.size);
         categoriesData = []; // Limpiar datos de categorías anteriores
         const categoriesContainer = document.getElementById('categories-container');
@@ -154,23 +169,69 @@ async function loadCategories() {
             categoriesContainer.innerHTML = '<p class="text-center text-gray-600 col-span-full">No hay categorías disponibles en este momento.</p>';
             categoriesSubmenu.innerHTML = '<li class="text-gray-600 text-lg py-2">No hay categorías.</li>';
         } else {
-            snapshot.forEach(doc => {
+            const categoryPromises = snapshot.docs.map(async doc => { // Procesar cada categoría asíncronamente
                 const category = { id: doc.id, ...doc.data() };
-                categoriesData.push(category); // Almacenar la categoría con su ID
-                console.log("loadCategories - Categoría cargada:", category.name);
 
-                // Renderizar en la sección principal
-                const categoryCard = `
-                    <div class="product-card bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer" onclick="goToCategory('${category.name}')">
-                        <img src="${category.imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen'}" alt="${category.name}" class="w-full h-48 sm:h-52 object-cover transition duration-300 ease-in-out transform hover:scale-105">
-                        <div class="p-6 sm:p-7">
-                            <h3 class="text-2xl sm:text-3xl font-semibold mb-2 sm:mb-3 text-gray-900">${category.name}</h3>
-                            <p class="text-base sm:text-lg text-gray-700 mb-4 sm:mb-5">${category.description || 'Descripción no disponible.'}</p>
-                            <button class="btn-primary text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-lg w-full">Ver Categoría</button>
-                        </div>
+                // Realizar una sub-consulta para obtener hasta 3 imágenes de productos de esta categoría
+                const productsForCategoryQuery = query(
+                    collection(db, `artifacts/${appId}/public/data/products`),
+                    where("category", "==", category.name),
+                    limit(3) // Revertido a 3 para la animación
+                );
+                const productsSnapshot = await getDocs(productsForCategoryQuery);
+                
+                // Recolectar URLs de imágenes de productos, filtrando las nulas/vacías
+                // y asegurándose de no incluir la imagen principal de la categoría si ya está en los productos
+                const productImages = productsSnapshot.docs
+                    .map(pDoc => pDoc.data().imageUrl)
+                    .filter(url => url && url !== category.imageUrl);
+
+                // Si la categoría tiene una imagen principal, la añadimos al inicio de la lista
+                if (category.imageUrl) {
+                    productImages.unshift(category.imageUrl);
+                }
+                
+                // Asegurarse de que productImages no esté vacío si hay imageUrl de categoría
+                if (productImages.length === 0 && category.imageUrl) {
+                    productImages.push(category.imageUrl);
+                }
+
+                category.productImages = productImages;
+                categoriesData.push(category);
+                return category;
+            });
+
+            // Esperar a que todas las sub-consultas de imágenes de productos se completen
+            const loadedCategories = await Promise.all(categoryPromises);
+
+            loadedCategories.forEach(category => {
+                // Crear el elemento de la tarjeta de categoría
+                const categoryCardDiv = document.createElement('div');
+                categoryCardDiv.className = "product-card bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer";
+                categoryCardDiv.setAttribute('onclick', `goToCategory('${category.name}')`);
+                categoryCardDiv.setAttribute('data-category-name', category.name);
+                categoryCardDiv.setAttribute('data-original-image', category.imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen');
+                categoryCardDiv.setAttribute('data-product-images', JSON.stringify(category.productImages));
+
+                // Rellenar el contenido HTML de la tarjeta
+                // La imagen tiene un onclick para abrir el modal de zoom
+                categoryCardDiv.innerHTML = `
+                    <img src="${category.imageUrl || 'https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen'}"
+                         alt="${category.name}"
+                         class="w-full h-48 object-cover transition duration-300 ease-in-out transform hover:scale-105 category-image-animated">
+                    <div class="p-6 sm:p-7">
+                        <h3 class="text-2xl sm:text-3xl font-semibold mb-2 sm:mb-3 text-gray-900">${category.name}</h3>
+                        <p class="text-base sm:text-lg text-gray-700 mb-4 sm:mb-5">${category.description || 'Descripción no disponible.'}</p>
+                        <button class="btn-primary text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-lg w-full">Ver Categoría</button>
                     </div>
                 `;
-                categoriesContainer.innerHTML += categoryCard;
+                
+                // Añadir listeners directamente a la tarjeta creada para la animación en PC
+                categoryCardDiv.addEventListener('mouseenter', () => startCategoryImageAnimation(categoryCardDiv));
+                // Corrección aquí: Pasar 'categoryCardDiv' directamente para asegurar que esté definido
+                categoryCardDiv.addEventListener('mouseleave', () => stopCategoryImageAnimation(categoryCardDiv));
+
+                categoriesContainer.appendChild(categoryCardDiv);
 
                 // Renderizar en el submenú móvil
                 const submenuItem = `
@@ -260,101 +321,6 @@ async function addProduct(name, price, imageUrl, categoryName, description, comp
 }
 
 /**
- * @function renderProductMedia
- * @description Genera el HTML para la visualización de medios (imagen o video) de un producto.
- * @param {string} name - Nombre del producto.
- * @param {string} imageUrl - URL de la imagen del producto.
- * @param {string} videoUrl - URL del video del producto.
- * @returns {string} HTML para el medio del producto.
- */
-function renderProductMedia(name, imageUrl, videoUrl) {
-    let mediaHtml = '';
-    const placeholderImage = 'https://placehold.co/600x400/cccccc/333333?text=Error+Media';
-
-    if (videoUrl) {
-        // Expresión regular mejorada para detectar IDs de YouTube y YouTube Shorts
-        const youtubeMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=|embed\/|v\/|shorts\/|)([a-zA-Z0-9_-]{11})(?:\S+)?/);
-        const streamableMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?streamable\.com\/([\w-]+)(?:\S+)?/);
-        const tiktokMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:tiktok\.com)\/@(?:[\w.-]+)\/video\/(\d+)(?:\S+)?/);
-
-
-        if (youtubeMatch && youtubeMatch[1]) {
-            const embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=0&controls=1&mute=1&loop=1&playlist=${youtubeMatch[1]}`;
-            mediaHtml = `
-                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
-                    <iframe
-                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
-                        src="${embedUrl}"
-                        frameborder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowfullscreen
-                        onerror="console.error('Error al cargar iframe de YouTube para el producto ${name}'); this.src='${placeholderImage}';"
-                    ></iframe>
-                </div>
-            `;
-            console.log("renderProductMedia - Usando iframe de YouTube para producto", name, ". URL:", embedUrl);
-        } else if (streamableMatch && streamableMatch[1]) {
-            const embedUrl = `https://streamable.com/e/${streamableMatch[1]}?autoplay=0&controls=1&muted=1&loop=0`;
-            mediaHtml = `
-                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
-                    <iframe
-                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
-                        src="${embedUrl}"
-                        frameborder="0"
-                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen
-                        onerror="console.error('Error al cargar iframe de Streamable para el producto ${name}'); this.src='${placeholderImage}';"
-                    ></iframe>
-                </div>
-            `;
-            console.log("renderProductMedia - Usando iframe de Streamable para producto", name, ". URL:", embedUrl);
-        } else if (tiktokMatch && tiktokMatch[1]) {
-            // TikTok embed code. Note: TikTok embeds often require their own JS SDK for full functionality.
-            // For a simpler iframe, you might need to adjust the URL or consider using their widget.
-            // This is a basic iframe attempt, full embedding might be more complex.
-            const embedUrl = `https://www.tiktok.com/embed/v2/${tiktokMatch[1]}?autoplay=0&controls=1&muted=1`;
-            mediaHtml = `
-                <div class="relative w-full" style="padding-bottom: 120%;"> <!-- Aspect Ratio for TikTok (approx 9:16) -->
-                    <iframe
-                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
-                        src="${embedUrl}"
-                        frameborder="0"
-                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen
-                        onerror="console.error('Error al cargar iframe de TikTok para el producto ${name}'); this.src='${placeholderImage}';"
-                    ></iframe>
-                </div>
-            `;
-            console.log("renderProductMedia - Usando iframe de TikTok para producto", name, ". URL:", embedUrl);
-        }
-        else {
-            // Si no es una URL de plataforma reconocida, asumimos que es un video directo (ej. .mp4)
-            mediaHtml = `
-                <video
-                    class="w-full h-40 object-cover rounded-t-xl"
-                    controls
-                    muted
-                    loop
-                    playsinline
-                    onerror="console.error('Error al cargar video directo para el producto ${name}'); this.parentNode.innerHTML='<img src=\\'${placeholderImage}\\' alt=\\'Error de video\\' class=\\'w-full h-40 object-cover rounded-t-xl\\'>';"
-                >
-                    <source src="${videoUrl}" type="video/mp4">
-                    Tu navegador no soporta el tag de video.
-                </video>
-            `;
-            console.log("renderProductMedia - Usando video directo para producto", name, ". URL:", videoUrl);
-        }
-    } else if (imageUrl) {
-        // Se agrega el onclick para abrir la imagen en pantalla completa
-        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-40 object-cover rounded-t-xl cursor-pointer" onclick="openFullscreenImage('${imageUrl}', '${name}')" onerror="this.onerror=null;this.src='${placeholderImage}';">`;
-    } else {
-        mediaHtml = `<img src="${placeholderImage}" alt="Sin imagen" class="w-full h-40 object-cover rounded-t-xl">`;
-    }
-    return mediaHtml;
-}
-
-
-/**
  * @function loadAllProducts
  * @description Carga todos los productos desde Firestore y los muestra en el contenedor de productos.
  */
@@ -381,11 +347,89 @@ async function loadAllProducts() {
                 productContainer.innerHTML = '<p class="text-center text-gray-600 col-span-full">No hay productos disponibles en esta sección.</p>';
             } else {
                 snapshot.forEach(doc => {
+                    // Se extraen los nuevos campos componentsUrl y videoUrl
                     const { name, price, imageUrl, description, componentsUrl, videoUrl } = doc.data();
                     console.log("loadAllProducts - Producto cargado:", name);
-                    console.log("loadAllProducts - Video URL para producto", name, ":", videoUrl);
+                    console.log("loadAllProducts - Video URL para producto", name, ":", videoUrl); // DEBUG: Log de la URL del video
 
-                    const mediaHtml = renderProductMedia(name, imageUrl, videoUrl);
+                    let mediaHtml = '';
+                    if (videoUrl && videoUrl.trim() !== '') { // Asegurarse de que videoUrl no sea una cadena vacía
+                        // Regex para YouTube (videos normales, shorts, embeds)
+                        const youtubeMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)(?:\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})(?:\S+)?/);
+                        // Regex para TikTok
+                        const tiktokMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/(\d+)/);
+                        // Regex para Streamable (existente)
+                        const streamableMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?streamable\.com\/([\w-]+)(?:\S+)?/);
+
+                        if (youtubeMatch && youtubeMatch[1]) {
+                            const embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=0&controls=1&mute=1&loop=1&playlist=${youtubeMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de YouTube para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+YT';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadAllProducts - Usando iframe de YouTube para producto", name, ". URL:", embedUrl);
+                        } else if (tiktokMatch && tiktokMatch[1]) { // Nuevo: Si es TikTok
+                            const embedUrl = `https://www.tiktok.com/embed/${tiktokMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio (ajustar si TikTok tiene otro aspect ratio preferente) -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de TikTok para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+TikTok';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadAllProducts - Usando iframe de TikTok para producto", name, ". URL:", embedUrl);
+                        } else if (streamableMatch && streamableMatch[1]) { // Existente: Si es Streamable
+                            const embedUrl = `https://streamable.com/e/${streamableMatch[1]}?autoplay=0&controls=1&muted=1&loop=0`; // Streamable embed URL
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de Streamable para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+Streamable';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadAllProducts - Usando iframe de Streamable para producto", name, ". URL:", embedUrl);
+                        }
+                        else {
+                            // Si no coincide con ninguna plataforma conocida, asumimos que es un video directo (ej. .mp4)
+                            mediaHtml = `
+                                <video 
+                                    class="w-full h-48 object-cover rounded-t-xl" 
+                                    controls 
+                                    muted 
+                                    loop 
+                                    playsinline
+                                    onerror="console.error('Error al cargar video directo para el producto ${name}', this); this.parentNode.innerHTML='<img src=\\'https://placehold.co/600x400/cccccc/333333?text=Error+Video\\' alt=\\'Error de video\\' class=\\'w-full h-48 object-cover rounded-t-xl\\'>';"
+                                >
+                                    <source src="${videoUrl}" type="video/mp4">
+                                    Tu navegador no soporta el tag de video.
+                                </video>
+                            `;
+                            console.log("loadAllProducts - Usando video directo para producto", name, ". URL:", videoUrl);
+                        }
+                    } else if (imageUrl) {
+                        // Se agrega un marcador de posición para la URL de la imagen que usaremos en el event listener
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-48 object-cover rounded-t-xl cursor-pointer product-image" data-full-image-url="${imageUrl}" data-alt-text="${name}" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                    } else {
+                        mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-48 object-cover rounded-t-xl">`;
+                    }
 
                     let componentsButtonHtml = '';
                     if (componentsUrl) {
@@ -396,18 +440,30 @@ async function loadAllProducts() {
                         `;
                     }
 
-                    const productCard = `
-                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
-                            ${mediaHtml}
-                            <div class="p-4 flex flex-col flex-grow">
-                                <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
-                                <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
-                                <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
-                                ${componentsButtonHtml}
-                            </div>
+                    const productCardDiv = document.createElement('div');
+                    productCardDiv.className = "product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col";
+                    productCardDiv.innerHTML = `
+                        ${mediaHtml}
+                        <div class="p-4 flex flex-col flex-grow">
+                            <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
+                            <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
+                            <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
+                            ${componentsButtonHtml}
                         </div>
                     `;
-                    productContainer.innerHTML += productCard;
+                    productContainer.appendChild(productCardDiv);
+
+                    // Añadir el event listener a la imagen si existe
+                    const productImage = productCardDiv.querySelector('.product-image');
+                    if (productImage) {
+                        productImage.addEventListener('click', (event) => {
+                            const fullImageUrl = event.target.dataset.fullImageUrl;
+                            const altText = event.target.dataset.altText;
+                            if (fullImageUrl) {
+                                openFullscreenImage(fullImageUrl, altText);
+                            }
+                        });
+                    }
                 });
             }
             hideLoading('products-loading-spinner'); // Oculta el loader de productos
@@ -448,7 +504,7 @@ async function loadProductsByCategory(categoryName) {
     try {
         const productsColRef = collection(db, `artifacts/${appId}/public/data/products`);
         // MODIFICADO: Ahora el filtro usa el campo 'category' con el nombre de la categoría
-        const q = query(productsColRef, where("category", "==", categoryName));
+        const q = query(productsColRef, where("category", "==", categoryName)); 
 
         onSnapshot(q, (snapshot) => {
             console.log("loadProductsByCategory - onSnapshot recibido para categoría. Número de productos:", snapshot.size);
@@ -458,11 +514,89 @@ async function loadProductsByCategory(categoryName) {
                 productContainer.innerHTML = `<p class="text-center text-gray-600 col-span-full">No hay productos disponibles en la categoría "${categoryName}".</p>`;
             } else {
                 snapshot.forEach(doc => {
+                    // Se extraen los nuevos campos componentsUrl y videoUrl
                     const { name, price, imageUrl, description, componentsUrl, videoUrl } = doc.data();
                     console.log("loadProductsByCategory - Producto cargado por categoría:", name);
-                    console.log("loadProductsByCategory - Video URL para producto", name, ":", videoUrl);
+                    console.log("loadProductsByCategory - Video URL para producto", name, ":", videoUrl); // DEBUG: Log de la URL del video
+                    
+                    let mediaHtml = '';
+                    if (videoUrl && videoUrl.trim() !== '') { // Asegurarse de que videoUrl no sea una cadena vacía
+                        // Regex para YouTube (videos normales, shorts, embeds)
+                        const youtubeMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)(?:\/(?:watch\?v=|embed\/|v\/|shorts\/))([\w-]{11})(?:\S+)?/);
+                        // Regex para TikTok
+                        const tiktokMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/(\d+)/);
+                        // Regex para Streamable (existente)
+                        const streamableMatch = videoUrl.match(/(?:https?:\/\/)?(?:www\.)?streamable\.com\/([\w-]+)(?:\S+)?/);
 
-                    const mediaHtml = renderProductMedia(name, imageUrl, videoUrl);
+                        if (youtubeMatch && youtubeMatch[1]) {
+                            const embedUrl = `https://www.youtube.com/embed/${youtubeMatch[1]}?autoplay=0&controls=1&mute=1&loop=1&playlist=${youtubeMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de YouTube para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+YT';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadProductsByCategory - Usando iframe de YouTube para producto", name, ". URL:", embedUrl);
+                        } else if (tiktokMatch && tiktokMatch[1]) { // Nuevo: Si es TikTok
+                            const embedUrl = `https://www.tiktok.com/embed/${tiktokMatch[1]}`;
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio (ajustar si TikTok tiene otro aspect ratio preferente) -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de TikTok para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+TikTok';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadProductsByCategory - Usando iframe de TikTok para producto", name, ". URL:", embedUrl);
+                        } else if (streamableMatch && streamableMatch[1]) { // Existente: Si es Streamable
+                            const embedUrl = `https://streamable.com/e/${streamableMatch[1]}?autoplay=0&controls=1&muted=1&loop=0`; // Streamable embed URL
+                            mediaHtml = `
+                                <div class="relative w-full" style="padding-bottom: 56.25%;"> <!-- 16:9 Aspect Ratio -->
+                                    <iframe
+                                        class="absolute top-0 left-0 w-full h-full rounded-t-xl"
+                                        src="${embedUrl}"
+                                        frameborder="0"
+                                        allow="autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowfullscreen
+                                        onerror="console.error('Error al cargar iframe de Streamable para el producto ${name}', this); this.src='https://placehold.co/600x400/cccccc/333333?text=Error+Video+Streamable';"
+                                    ></iframe>
+                                </div>
+                            `;
+                            console.log("loadProductsByCategory - Usando iframe de Streamable para producto", name, ". URL:", embedUrl);
+                        }
+                        else {
+                            // Si no coincide con ninguna plataforma conocida, asumimos que es un video directo (ej. .mp4)
+                            mediaHtml = `
+                                <video 
+                                    class="w-full h-48 object-cover rounded-t-xl" 
+                                    controls 
+                                    muted 
+                                    loop 
+                                    playsinline
+                                    onerror="console.error('Error al cargar video directo para el producto ${name}', this); this.parentNode.innerHTML='<img src=\\'https://placehold.co/600x400/cccccc/333333?text=Error+Video\\' alt=\\'Error de video\\' class=\\'w-full h-48 object-cover rounded-t-xl\\'>';"
+                                >
+                                    <source src="${videoUrl}" type="video/mp4">
+                                    Tu navegador no soporta el tag de video.
+                                </video>
+                            `;
+                            console.log("loadProductsByCategory - Usando video directo para producto", name, ". URL:", videoUrl);
+                        }
+                    } else if (imageUrl) {
+                        // Se agrega un marcador de posición para la URL de la imagen que usaremos en el event listener
+                        mediaHtml = `<img src="${imageUrl}" alt="${name}" class="w-full h-48 object-cover rounded-t-xl cursor-pointer product-image" data-full-image-url="${imageUrl}" data-alt-text="${name}" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Imagen+No+Cargada';">`;
+                    } else {
+                        mediaHtml = `<img src="https://placehold.co/600x400/cccccc/333333?text=Sin+Imagen" alt="Sin imagen" class="w-full h-48 object-cover rounded-t-xl">`;
+                    }
 
                     let componentsButtonHtml = '';
                     if (componentsUrl) {
@@ -473,29 +607,35 @@ async function loadProductsByCategory(categoryName) {
                         `;
                     }
 
-                    const productCard = `
-                        <div class="product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
-                            ${mediaHtml}
-                            <div class="p-4 flex flex-col flex-grow">
-                                <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
-                                <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
-                                <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
-                                ${componentsButtonHtml}
-                            </div>
+                    const productCardDiv = document.createElement('div');
+                    productCardDiv.className = "product-card bg-white rounded-xl shadow-lg overflow-hidden flex flex-col";
+                    productCardDiv.innerHTML = `
+                        ${mediaHtml}
+                        <div class="p-4 flex flex-col flex-grow">
+                            <h3 class="text-lg font-semibold text-gray-800">${name}</h3>
+                            <p class="text-gray-600 text-sm mt-1 flex-grow">${description || ''}</p>
+                            <p class="text-blue-600 font-bold mt-2">$${price ? price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}</p>
+                            ${componentsButtonHtml}
                         </div>
                     `;
-                    productContainer.innerHTML += productCard;
+                    productContainer.appendChild(productCardDiv);
+
+                    // Añadir el event listener a la imagen si existe
+                    const productImage = productCardDiv.querySelector('.product-image');
+                    if (productImage) {
+                        productImage.addEventListener('click', (event) => {
+                            const fullImageUrl = event.target.dataset.fullImageUrl;
+                            const altText = event.target.dataset.altText;
+                            if (fullImageUrl) {
+                                openFullscreenImage(fullImageUrl, altText);
+                            }
+                        });
+                    }
                 });
             }
             hideLoading('products-loading-spinner'); // Oculta el loader de productos
-            // Cerrar el messageBox automáticamente después de que los productos se hayan cargado.
-            // Para esto, necesitamos una referencia al messageBox específico.
-            // La solución más limpia es que showMessageBox devuelva el elemento y luego lo cerremos.
-            // Por ahora, lo haremos directamente.
-            const existingMessageBox = document.querySelector('.message-box-autodismiss');
-            if (existingMessageBox) {
-                existingMessageBox.remove();
-            }
+            productsInitialLoadComplete = true; // Marcar productos como cargados
+            checkAndHideMainLoader(); // Verificar si el loader principal puede ocultarse
         }, (error) => {
             console.error("loadProductsByCategory - Error al cargar productos por categoría:", error);
             showMessageBox("Error al cargar productos por categoría. Inténtalo más tarde.");
@@ -538,6 +678,11 @@ function showMessageBox(message, duration = null) {
     if (duration !== null) {
         // Añadir una clase para identificar el messageBox que se autodismisirá
         messageBox.classList.add('message-box-autodismiss');
+        setTimeout(() => {
+            if (messageBox.parentNode) { // Asegurarse de que el elemento todavía existe
+                messageBox.remove();
+            }
+        }, duration);
     }
 
     return messageBox; // Retorna el elemento para poder manipularlo si es necesario
@@ -549,8 +694,8 @@ function showMessageBox(message, duration = null) {
  * @param {string} categoryName - El nombre de la categoría a la que navegar.
  */
 function goToCategory(categoryName) {
-    // Mostrar un mensaje de carga que se autodismisirá.
-    showMessageBox(`Cargando productos de la categoría: ${categoryName}...`, 3000); // Se cerrará en 3 segundos
+    // Mostrar un mensaje de carga que se autodismisirá después de 1 segundo (1000 milisegundos).
+    showMessageBox(`Cargando productos de la categoría: ${categoryName}...`, 1000); 
 
     loadProductsByCategory(categoryName); // Cargar los productos de la categoría
     closeMobileMenu();
@@ -630,9 +775,30 @@ function closeCategoriesSubmenu() {
  * @param {string} imageUrl - La URL de la imagen a mostrar.
  * @param {string} altText - El texto alternativo para la imagen.
  */
-function openFullscreenImage(imageUrl, altText) {
+window.openFullscreenImage = function(imageUrl, altText) {
+    console.log("openFullscreenImage - Llamada. URL:", imageUrl, "Alt:", altText); // Log de la llamada
     const modal = document.getElementById('image-fullscreen-modal');
     const image = document.getElementById('fullscreen-image');
+
+    // **VERIFICACIÓN CRÍTICA**: Asegurarse de que el modal y la imagen existen en el DOM
+    if (!modal || !image) {
+        console.error("openFullscreenImage - Error: Elementos del modal de zoom no encontrados en el DOM.");
+        showMessageBox("No se pudo iniciar el zoom. Por favor, asegúrate de que el modal de imagen esté presente en la página.");
+        return; // Salir de la función si los elementos no existen
+    }
+
+    // Limpiar cualquier manejador de errores anterior y atributo src para una carga limpia
+    image.onerror = null;
+    image.src = ''; 
+    image.alt = '';
+
+    // Configurar el manejador de errores antes de establecer el src
+    image.onerror = function() {
+        console.error("openFullscreenImage - Error al cargar la imagen en pantalla completa:", imageUrl);
+        image.src = 'https://placehold.co/600x400/FF0000/FFFFFF?text=Error+Carga+Imagen'; // Imagen de fallback
+        image.alt = 'Error al cargar la imagen';
+        showMessageBox("No se pudo cargar la imagen en pantalla completa. Por favor, inténtalo de nuevo.");
+    };
 
     image.src = imageUrl;
     image.alt = altText;
@@ -644,15 +810,92 @@ function openFullscreenImage(imageUrl, altText) {
  * @function closeFullscreenImage
  * @description Cierra el modal de imagen en pantalla completa.
  */
-function closeFullscreenImage() {
+window.closeFullscreenImage = function() {
+    console.log("closeFullscreenImage - Llamada."); // Log de la llamada
     const modal = document.getElementById('image-fullscreen-modal');
+    const image = document.getElementById('fullscreen-image'); // Necesitamos obtener la referencia de la imagen aquí también
+
+    // **VERIFICACIÓN CRÍTICA**: Asegurarse de que el modal y la imagen existen en el DOM
+    if (!modal || !image) {
+        console.error("closeFullscreenImage - Error: Elementos del modal de zoom no encontrados en el DOM.");
+        return; // Salir de la función si los elementos no existen
+    }
+
     modal.classList.remove('open');
     document.body.style.overflow = ''; // Restaura el scroll del cuerpo
+
+    // Limpiar la imagen y su manejador de errores para liberar recursos
+    image.src = ''; // Vaciar el src para asegurar una carga limpia la próxima vez
+    image.onerror = null;
+}
+
+/**
+ * @function startCategoryImageAnimation
+ * @description Inicia la animación de cambio de imagen para una tarjeta de categoría al pasar el ratón.
+ * @param {HTMLElement} cardElement - El elemento de la tarjeta de categoría.
+ */
+function startCategoryImageAnimation(cardElement) {
+    const imgElement = cardElement.querySelector('.category-image-animated');
+    if (!imgElement) return;
+
+    const originalImageUrl = cardElement.dataset.originalImage;
+    const productImages = JSON.parse(cardElement.dataset.productImages || '[]');
+
+    // Si no hay suficientes imágenes para animar (menos de 2), no hacer nada.
+    if (productImages.length <= 1) {
+        // Asegurarse de que el intervalo si existía, se limpie y se elimine
+        stopCategoryImageAnimation(cardElement);
+        return;
+    }
+
+    // Limpiar cualquier intervalo existente para esta tarjeta
+    stopCategoryImageAnimation(cardElement);
+
+    let currentIndex = productImages.indexOf(imgElement.src);
+    if (currentIndex === -1 || currentIndex >= productImages.length - 1) {
+        currentIndex = -1; // Si la imagen actual no está en la lista o es la última, empezar desde el principio
+    }
+
+    const intervalId = setInterval(() => {
+        currentIndex = (currentIndex + 1) % productImages.length;
+        // Aplicar un efecto de desvanecimiento sutil
+        imgElement.style.opacity = '0';
+        setTimeout(() => {
+            imgElement.src = productImages[currentIndex];
+            imgElement.style.opacity = '1';
+        }, 300); // 300ms coincide con la duración de la transición CSS
+    }, 2000); // Cambiar imagen cada 2 segundos
+
+    categoryAnimationIntervals[cardElement.dataset.categoryName] = intervalId;
+}
+
+/**
+ * @function stopCategoryImageAnimation
+ * @description Detiene la animación de cambio de imagen para una tarjeta de categoría.
+ * @param {HTMLElement} cardElement - El elemento de la tarjeta de categoría.
+ */
+function stopCategoryImageAnimation(cardElement) {
+    const categoryName = cardElement.dataset.categoryName;
+    if (categoryAnimationIntervals[categoryName]) {
+        clearInterval(categoryAnimationIntervals[categoryName]);
+        delete categoryAnimationIntervals[categoryName];
+
+        const imgElement = cardElement.querySelector('.category-image-animated');
+        if (imgElement) {
+            // Revertir la imagen a la original con un desvanecimiento
+            imgElement.style.opacity = '0';
+            setTimeout(() => {
+                imgElement.src = cardElement.dataset.originalImage;
+                imgElement.style.opacity = '1';
+            }, 300);
+        }
+    }
 }
 
 
 // Lógica para el menú de hamburguesa y submenús
 document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOMContentLoaded - DOM completamente cargado."); // Log de DOMContentLoaded
     const mobileMenuButton = document.getElementById('mobile-menu-button');
     const mobileNav = document.getElementById('mobile-nav');
     const categoriesToggleButton = document.getElementById('categories-toggle-button');
@@ -720,14 +963,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cerrar modal de imagen al hacer clic en el botón de cerrar
     if (closeImageModalButton) {
-        closeImageModalButton.addEventListener('click', closeFullscreenImage);
+        closeImageModalButton.addEventListener('click', window.closeFullscreenImage); // Usar window.closeFullscreenImage
     }
 
     // Cerrar modal de imagen al hacer clic fuera de la imagen (en el overlay)
     if (imageFullscreenModal) {
         imageFullscreenModal.addEventListener('click', function(event) {
             if (event.target === imageFullscreenModal) { // Solo si el click es directamente en el overlay
-                closeFullscreenImage();
+                window.closeFullscreenImage(); // Usar window.closeFullscreenImage
             }
         });
     }
@@ -742,6 +985,42 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     });
+
+    // --- Lógica para animaciones de imágenes de categoría (para dispositivos táctiles) ---
+    const categoriesContainer = document.getElementById('categories-container');
+    if (categoriesContainer) {
+        // Para dispositivos táctiles: un toque inicia, otro lo detiene o click fuera
+        categoriesContainer.addEventListener('touchstart', (event) => {
+            const card = event.target.closest('.product-card');
+            if (card) {
+                // Detener animaciones de otras tarjetas activas
+                for (const key in categoryAnimationIntervals) {
+                    if (key !== card.dataset.categoryName) {
+                        const otherCard = document.querySelector(`[data-category-name="${key}"]`);
+                        if (otherCard) stopCategoryImageAnimation(otherCard);
+                    }
+                }
+                // Alternar animación para la tarjeta tocada
+                if (categoryAnimationIntervals[card.dataset.categoryName]) {
+                    stopCategoryImageAnimation(card);
+                } else {
+                    startCategoryImageAnimation(card);
+                }
+            }
+        });
+
+        // Listener global para detener la animación si se hace clic fuera de una tarjeta activa
+        document.body.addEventListener('click', (event) => {
+            const card = event.target.closest('.product-card');
+            if (!card && Object.keys(categoryAnimationIntervals).length > 0) {
+                for (const key in categoryAnimationIntervals) {
+                    const activeCard = document.querySelector(`[data-category-name="${key}"]`);
+                    if (activeCard) stopCategoryImageAnimation(activeCard);
+                }
+            }
+        });
+    }
+    // --- Fin de la lógica para animaciones de imágenes de categoría ---
 });
 
 
@@ -759,4 +1038,6 @@ window.closeMobileMenu = closeMobileMenu; // Exponer para ser llamada desde los 
 window.openMobileMenu = openMobileMenu; // Exponer para ser llamada
 window.openFullscreenImage = openFullscreenImage; // Exponer para abrir imágenes en pantalla completa
 window.closeFullscreenImage = closeFullscreenImage; // Exponer para cerrar imágenes en pantalla completa
+window.startCategoryImageAnimation = startCategoryImageAnimation; // Exponer la función de animación de categoría
+window.stopCategoryImageAnimation = stopCategoryImageAnimation;   // Exponer la función de detener animación de categoría
 
