@@ -131,11 +131,12 @@
             font-family: 'Inter', sans-serif;
             opacity: 1;
             transition: opacity 0.5s ease-out;
+            pointer-events: auto; /* Por defecto, permite eventos de puntero para que bloquee la interacción */
         }
 
         #futuristic-loader.hidden {
             opacity: 0;
-            pointer-events: none; /* Permite interacciones con el contenido de abajo una vez oculto */
+            pointer-events: none; /* Deshabilita los eventos del puntero cuando está oculto */
         }
 
         .loader-grid {
@@ -225,6 +226,11 @@
         .shadow-inner-top {
             box-shadow: inset 0 8px 10px -5px rgba(0, 0, 0, 0.2);
         }
+        
+        /* Estilos para la animación de la imagen de la categoría */
+        .category-image-animated {
+            transition: opacity 0.3s ease-in-out;
+        }
 
         /* Estilos para el modal de imagen en pantalla completa */
         .image-modal-overlay {
@@ -241,11 +247,13 @@
             opacity: 0;
             visibility: hidden;
             transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            pointer-events: none; /* Asegura que no bloquee los clics cuando está oculto */
         }
 
         .image-modal-overlay.open {
             opacity: 1;
             visibility: visible;
+            pointer-events: auto; /* Permite eventos cuando está abierto */
         }
 
         .image-modal-content {
@@ -370,9 +378,9 @@
     <!-- Sección de Categorías -->
     <section id="productos" class="py-16 sm:py-20 section-bg-gradient">
         <div class="container mx-auto px-4">
-            <h2 class="text-4xl sm:text-5xl font-bold text-center mb-12 sm:mb-16 text-gray-900">Nuestras Categorías</h2>
+            <h2 class="text-4xl sm:text-5xl font-bold text-center mb-12 sm:mb-16 text-gray-900 animate-fade-in-down">Nuestras Categorías</h2>
             <!-- Categories will be loaded here by JavaScript -->
-            <div id="categories-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 sm:gap-10">
+            <div id="categories-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10">
                 <!-- Se mostrará un spinner mientras se cargan las categorías -->
                 <div id="categories-loading-spinner" class="col-span-full text-center py-10">
                     <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mx-auto"></div>
@@ -385,14 +393,14 @@
     <!-- Nueva Sección para Productos (Catálogo General) -->
     <section id="catalogo-productos" class="py-16 sm:py-20 bg-white">
         <div class="container mx-auto px-4">
-            <h2 class="text-4xl sm:text-5xl font-bold text-center mb-12 sm:mb-16 text-gray-900">Todos Nuestros Productos</h2>
+            <h2 class="text-4xl sm:text-5xl font-bold text-center mb-12 sm:mb-16 text-gray-900 animate-fade-in-down">Todos Nuestros Productos</h2>
             <!-- Loading Spinner for Products -->
             <div id="products-loading-spinner" class="col-span-full text-center py-10">
                 <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mx-auto"></div>
                 <p class="mt-4 text-gray-600">Cargando productos...</p>
             </div>
             <!-- Products will be loaded here by JavaScript -->
-            <div id="contenedor-productos" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 sm:gap-10">
+            <div id="contenedor-productos" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-8 sm:gap-10">
                 <p class="text-center text-gray-600 col-span-full">Cargando productos...</p>
             </div>
         </div>
@@ -404,6 +412,7 @@
             <p class="text-sm sm:text-lg">&copy; 2025 Ensintonía. Todos los derechos reservados.</p>
             <p class="text-xs sm:text-sm mt-2 text-gray-400">Diseñado con <span class="text-red-500">&hearts;</span> para tu hogar.</p>
             <p id="user-id-display" class="text-xs mt-2 text-gray-500">ID de Usuario: Cargando...</p>
+            <p class="text-xs mt-2 text-gray-500">Site Creator: Maximo Lavagetto</p> <!-- Added this line -->
         </div>
     </footer>
 
@@ -415,7 +424,7 @@
         </a>
     </div>
 
-    <!-- Modal para la imagen en pantalla completa -->
+    <!-- Modal para la imagen en pantalla completa (nueva implementación de zoom) -->
     <div id="image-fullscreen-modal" class="image-modal-overlay">
         <div class="image-modal-content">
             <img id="fullscreen-image" src="" alt="Imagen en pantalla completa">
